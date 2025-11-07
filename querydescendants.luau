@@ -148,14 +148,20 @@ type function querytype(selector: type, creatableinstances: type)
 				break
 			end
 		end
-		if not acc then error("Expected a simple selector") end
+		if not acc then
+			error("Expected a simple selector")
+		end
 		return acc
 	end
 
 	while true do
 		skipws()
 		if peek() == ">" then
-			if peek(1) == ">" then advance(2) else advance(1) end
+			if peek(1) == ">" then
+				advance(2)
+			else
+				advance(1)
+			end
 		else
 			break
 		end
@@ -164,7 +170,11 @@ type function querytype(selector: type, creatableinstances: type)
 	local function peekop(): string?
 		skipws()
 		if peek() == ">" then
-			if peek(1) == ">" then return ">>" else return ">" end
+			if peek(1) == ">" then
+				return ">>"
+			else
+				return ">"
+			end
 		elseif peek() == "," then
 			return ","
 		end
@@ -209,7 +219,9 @@ type function querytype(selector: type, creatableinstances: type)
 		local parts = { parseexpr(0) }
 		while true do
 			local op = peekop()
-			if op ~= "," then break end
+			if op ~= "," then
+				break
+			end
 			consumeop(",")
 			table.insert(parts, parseexpr(0))
 		end
@@ -228,7 +240,7 @@ type function arrayof(element: type)
 	return arr
 end
 
-local function querydescendants<T>(instance: Instance, selector: T | ""): arrayof<querytype<T, CreatableInstances>>
+local function querydescendants<T>(instance: Instance, selector: T & (string | "")): arrayof<querytype<T, CreatableInstances>>
 	return instance:QueryDescendants(selector) :: arrayof<querytype<T, CreatableInstances>>
 end
 
