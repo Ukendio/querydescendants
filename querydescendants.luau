@@ -1,6 +1,6 @@
 --!strict
 -- TODO(marcus): just steal from Roblox-TS
-type CreatableInstances = {
+type creatableinstances = {
 	Part: Part,
 	Model: Model,
 	Frame: Frame,
@@ -33,7 +33,7 @@ type CreatableInstances = {
 	Motor6D: Motor6D,
 }
 
-type function querytype(selector: type, creatableinstances: type)
+type function querytype(selector: type)
 	local str = selector:value()
 	assert(typeof(str) == "string")
 
@@ -68,46 +68,30 @@ type function querytype(selector: type, creatableinstances: type)
 		return string.sub(str, start, pos - 1)
 	end
 
-	local function parsequoted()
-		advance()
-		local start = pos
-		while pos <= len and peek() ~= '"' do advance() end
-		local v = string.sub(str, start, pos - 1)
-		advance()
-		return v
-	end
-
 	local function parsevalue()
 		skipws()
-		if peek() == '"' then
-			return types.singleton(parsequoted())
-		end
 		local word = parseident()
-		if word == "true" then
-			return types.singleton(true)
-		end
-		if word == "false" then
-			return types.singleton(false)
+		if word == "true" or word == "false" then
+			return types.boolean
 		end
 		local num = tonumber(word)
 		if num ~= nil then
 			return types.number
 		end
-		return types.singleton(word)
+		if peek() == "'" or peek() == "\"" then
+			return types.string
+		end
+		error("Cannot serialize this value")
 	end
 
-	local function and_into(base: type, tbl: type)
-		return types.intersectionof(base, tbl)
-	end
-
-	local function parsesimplelist()
+	local function parseatom(): type
 		local acc: type? = nil
-		local class = ""
+		local classname = ""
 		if pos <= len and isident(peek()) then
-			class = parseident()
-			if class ~= "" then
-				local elem = creatableinstances:readproperty(types.singleton(class))
-				acc = elem
+			classname = parseident()
+			if classname ~= "" then
+				local elem = creatableinstances:readproperty(types.singleton(classname))
+				acc = elem :: type
 			end
 		end
 		while pos <= len do
@@ -118,32 +102,46 @@ type function querytype(selector: type, creatableinstances: type)
 				local tag = parseident()
 				local tbl = types.newtable()
 				tbl:setproperty(types.singleton("$tag:" .. tag), types.boolean)
-				acc = if acc then and_into(acc, tbl) else tbl
+				acc = if acc then types.intersectionof(acc, tbl) else tbl
 			elseif ch == "#" then
 				advance()
 				local name = parseident()
 				local tbl = types.newtable()
 				tbl:setproperty(types.singleton("Name"), types.singleton(name))
-				acc = if acc then and_into(acc, tbl) else tbl
+				acc = if acc then types.intersectionof(acc, tbl) else tbl
 			elseif ch == "[" then
 				advance()
 				skipws()
-				local is_attr = false
-				if peek() == "$" then
-					is_attr = true
-					advance()
-				end
+				-- if peek() == "$" then
+				-- 	advance()
+				-- end
 				local key = parseident()
 				skipws()
-				advance()
+				if peek() == "=" then
+					advance()
+					skipws()
+					local value = parsevalue()
+					if acc and acc:is("class") then
+						local foundkey = false
+						for k, v in acc:properties() do
+							if k == types.singleton(key) then
+								foundkey = true
+								if value:is("boolean") then
+									assert(v.write:is("boolean"), "Not a boolean")
+								elseif value:is("number") then
+									assert(v.write:is("number"), "Not a number")
+								elseif value:is("string") then
+									assert(v.write:is("string"), "Not a string")
+								else
+									error("Cannot serialize this type")
+								end
+							end
+						end
+						assert(foundkey, "Expected a valid key")
+					end
+				end
 				skipws()
-				local val = parsevalue()
-				skipws()
 				advance()
-				local tbl = types.newtable()
-				local propname = if is_attr then ("$attr:" .. key) else key
-				tbl:setproperty(types.singleton(propname), val)
-				acc = if acc then and_into(acc, tbl) else tbl
 			else
 				break
 			end
@@ -190,10 +188,10 @@ type function querytype(selector: type, creatableinstances: type)
 	local OPS = {
 		[">"]  = { lbp = 30, rbp = 31 },
 		[">>"] = { lbp = 20, rbp = 21 },
-	}
+	} :: { [string]: { lbp: number, rbp: number }}
 
 	local function parseexpr(min_bp: number)
-		local lhs = parsesimplelist()
+		local lhs = parseatom()
 		while true do
 			local op = peekop()
 			if not op or op == "," then
@@ -240,13 +238,15 @@ type function arrayof(element: type)
 	return arr
 end
 
-local function querydescendants<T>(instance: Instance, selector: T & (string | "")): arrayof<querytype<T, CreatableInstances>>
-	return instance:QueryDescendants(selector) :: arrayof<querytype<T, CreatableInstances>>
+local function querydescendants<T>(instance: Instance, selector: T & (string | "")): arrayof<querytype<T>>
+	return instance:QueryDescendants(selector) :: any
 end
 
--- local txtlabels_under_image_under_folder = querydescendants(
--- 	workspace,
--- 	"Folder > ImageButton > TextLabel[Name = 'Part10'][Transparency = 1]"
--- )
+local txtlabels_under_image_under_folder = querydescendants( workspace,
+	"Folder > ImageButton > TextLabel[Name = 'Part10'][Transparency = 1]" ::
+	"Folder>ImageButton[Image = '10']")
+
+for _, v in txtlabels_under_image_under_folder do
+end
 
 return querydescendants
