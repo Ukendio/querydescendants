@@ -535,7 +535,7 @@ end
 
 -- local txtlabels_under_image_under_folder = querydescendants( workspace,
 -- 	"Folder > ImageButton > TextLabel[Text = 'Part10'][Transparency = 1]" ::
--- 	"Folder > ImageButton > TextLabel[Text = '100'][Transparency = 1]"
+-- 	"Folder > ImageButton > TextLabel[Text = false][Transparency = 1]"
 -- )
 
 -- for _, v in txtlabels_under_image_under_folder do
