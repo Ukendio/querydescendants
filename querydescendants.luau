@@ -84,6 +84,17 @@ type function querytype(selector: type)
 		error("Cannot serialize this value")
 	end
 
+	local function intostr(ty: type)
+		if ty:is("string") then
+			return "string"
+		elseif ty:is("boolean") then
+			return "boolean"
+		elseif ty:is("number") then
+			return "number"
+		end
+		error("Cannot serialize this type")
+	end
+
 	local function parseatom(): type
 		local acc: type? = nil
 		local classname = ""
@@ -112,9 +123,9 @@ type function querytype(selector: type)
 			elseif ch == "[" then
 				advance()
 				skipws()
-				-- if peek() == "$" then
-				-- 	advance()
-				-- end
+				if peek() == "$" then
+					advance()
+				end
 				local key = parseident()
 				skipws()
 				if peek() == "=" then
@@ -126,12 +137,21 @@ type function querytype(selector: type)
 						for k, v in acc:properties() do
 							if k == types.singleton(key) then
 								foundkey = true
-								if value:is("boolean") then
-									assert(v.write:is("boolean"), "Not a boolean")
-								elseif value:is("number") then
-									assert(v.write:is("number"), "Not a number")
-								elseif value:is("string") then
-									assert(v.write:is("string"), "Not a string")
+								if v.write:is("boolean") then
+									assert(
+										value:is("boolean"),
+										`The field {key} expects a boolean but got {intostr(value)}}`
+									)
+								elseif v.write:is("number") then
+									assert(
+										value:is("number"),
+										`The field {key} expects a number but got {intostr(value)}`
+									)
+								elseif v.write:is("string") then
+									assert(
+										value:is("string"),
+										`The field {key} expects a string but got {intostr(value)}}`
+									)
 								else
 									error("Cannot serialize this type")
 								end
@@ -232,21 +252,16 @@ type function querytype(selector: type)
 	return parseunion()
 end
 
-type function arrayof(element: type)
-	local arr = types.newtable()
-	arr:setindexer(types.number, element)
-	return arr
-end
-
-local function querydescendants<T>(instance: Instance, selector: T & (string | "")): arrayof<querytype<T>>
+local function querydescendants<T>(instance: Instance, selector: T & (string | "")): { querytype<T> }
 	return instance:QueryDescendants(selector) :: any
 end
 
-local txtlabels_under_image_under_folder = querydescendants( workspace,
-	"Folder > ImageButton > TextLabel[Name = 'Part10'][Transparency = 1]" ::
-	"Folder>ImageButton[Image = '10']")
+-- local txtlabels_under_image_under_folder = querydescendants( workspace,
+-- 	"Folder > ImageButton > TextLabel[Text = 'Part10'][Transparency = 1]" ::
+-- 	"Folder > ImageButton > TextLabel[Text = false][Transparency = 1]"
+-- )
 
-for _, v in txtlabels_under_image_under_folder do
-end
+-- for _, v in txtlabels_under_image_under_folder do
+-- end
 
 return querydescendants
