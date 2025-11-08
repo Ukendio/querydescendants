@@ -310,6 +310,8 @@ type creatableinstances = {
     WrapTextureTransfer: WrapTextureTransfer;
 }
 
+type instance = Instance
+
 type function querytype(selector: type)
 	local str = selector:value()
 	assert(typeof(str) == "string")
@@ -322,31 +324,48 @@ type function querytype(selector: type)
 		return string.sub(str, pos + n, pos + n)
 	end
 
-	local function advance(n: number?)
+	local function consume(n: number?)
 		n = n or 1
 		pos = pos + n
 	end
 
 	local function skipws()
 		while pos <= len and peek() == " " do
-			advance()
+			consume()
 		end
 	end
 
 	local function isident(ch: string)
-		return string.match(ch, "^[%w_%-]$") ~= nil
+		return string.match(ch, "^[%w_%-$]$") ~= nil
 	end
 
 	local function parseident()
 		local start = pos
 		while pos <= len and isident(peek()) do
-			advance()
+			consume()
 		end
 		return string.sub(str, start, pos - 1)
 	end
 
+	local function parsequoted(): string
+		local q = peek()
+		assert(q == "'" or q == '"', "Expected quote")
+		consume(1)
+		local start = pos
+		while pos <= len and peek() ~= q do consume(1) end
+		assert(peek() == q, "Unterminated string")
+		local s = string.sub(str, start, pos - 1)
+		consume(1)
+		return s
+	end
+
 	local function parsevalue()
 		skipws()
+		local char = peek()
+		if char == "'" or char == '"' then
+			parsequoted()
+			return types.string
+		end
 		local word = parseident()
 		if word == "true" or word == "false" then
 			return types.boolean
@@ -386,27 +405,25 @@ type function querytype(selector: type)
 			skipws()
 			local ch = peek()
 			if ch == "." then
-				advance()
+				consume()
 				local tag = parseident()
 				local tbl = types.newtable()
 				tbl:setproperty(types.singleton("$tag:" .. tag), types.boolean)
 				acc = if acc then types.intersectionof(acc, tbl) else tbl
 			elseif ch == "#" then
-				advance()
-				local name = parseident()
-				local tbl = types.newtable()
-				tbl:setproperty(types.singleton("Name"), types.singleton(name))
-				acc = if acc then types.intersectionof(acc, tbl) else tbl
+				consume()
+				-- local name = parseident()
+				-- local tbl = types.newtable()
+				-- tbl:setproperty(types.singleton("Name"), types.singleton(name))
+				acc = if acc then types.intersectionof(acc, instance) else instance
 			elseif ch == "[" then
-				advance()
+				consume()
 				skipws()
-				if peek() == "$" then
-					advance()
-				end
+
 				local key = parseident()
 				skipws()
 				if peek() == "=" then
-					advance()
+					consume()
 					skipws()
 					local value = parsevalue()
 					if acc and acc:is("class") then
@@ -438,7 +455,8 @@ type function querytype(selector: type)
 					end
 				end
 				skipws()
-				advance()
+				consume(1)
+
 			else
 				break
 			end
@@ -453,9 +471,9 @@ type function querytype(selector: type)
 		skipws()
 		if peek() == ">" then
 			if peek(1) == ">" then
-				advance(2)
+				consume(2)
 			else
-				advance(1)
+				consume(1)
 			end
 		else
 			break
@@ -478,7 +496,11 @@ type function querytype(selector: type)
 
 	local function consumeop(op: string)
 		skipws()
-		if op == ">>" then advance(2) elseif op == ">" or op == "," then advance(1) end
+		if op == ">>" then
+			consume(2)
+		elseif op == ">" or op == "," then
+			consume(1)
+		end
 		skipws()
 	end
 
@@ -529,16 +551,16 @@ type function querytype(selector: type)
 	return parseunion()
 end
 
-local function querydescendants<T>(instance: Instance, selector: T & (string | "")): { querytype<T> }
-	return instance:QueryDescendants(selector) :: any
+local function querydescendants<T>(root: Instance, selector: T & (string | "")): { querytype<T> }
+	return root:QueryDescendants(selector) :: any
 end
 
--- local txtlabels_under_image_under_folder = querydescendants( workspace,
--- 	"Folder > ImageButton > TextLabel[Text = 'Part10'][Transparency = 1]" ::
--- 	"Folder > ImageButton > TextLabel[Text = false][Transparency = 1]"
--- )
+local txtlabels_under_image_under_folder = querydescendants(workspace,
+	"Folder > ImageButton > TextLabel[Text = 'Part10'][Transparency = 1]" ::
+	"Folder, TextLabel[Text='Test2'][TextTransparency=1]"
+)
 
--- for _, v in txtlabels_under_image_under_folder do
--- end
+for _, v in txtlabels_under_image_under_folder do
+end
 
 return querydescendants
