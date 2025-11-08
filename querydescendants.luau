@@ -349,7 +349,7 @@ type function querytype(selector: type)
 
 	local function parsequoted(): string
 		local q = peek()
-		assert(q == "'" or q == '"', "Expected quote")
+		assert(q == '"', "Expected quote")
 		consume(1)
 		local start = pos
 		while pos <= len and peek() ~= q do consume(1) end
@@ -362,7 +362,10 @@ type function querytype(selector: type)
 	local function parsevalue()
 		skipws()
 		local char = peek()
-		if char == "'" or char == '"' then
+		if char == "'" then
+			error("Does not support using single quotes")
+		end
+		if char == '"' then
 			parsequoted()
 			return types.string
 		end
@@ -393,12 +396,14 @@ type function querytype(selector: type)
 
 	local function parseatom(): type
 		local acc: type? = nil
+		local classtype: type? = nil
 		local classname = ""
 		if pos <= len and isident(peek()) then
 			classname = parseident()
 			if classname ~= "" then
 				local elem = creatableinstances:readproperty(types.singleton(classname))
 				acc = elem :: type
+				classtype = acc :: type
 			end
 		end
 		while pos <= len do
@@ -409,7 +414,8 @@ type function querytype(selector: type)
 				local tag = parseident()
 				local tbl = types.newtable()
 				tbl:setproperty(types.singleton("$tag:" .. tag), types.boolean)
-				acc = if acc then types.intersectionof(acc, tbl) else tbl
+				local i = types.intersectionof(tbl, instance)
+				acc = if acc then types.intersectionof(acc, i) else i
 			elseif ch == "#" then
 				consume()
 				-- local name = parseident()
@@ -417,41 +423,55 @@ type function querytype(selector: type)
 				-- tbl:setproperty(types.singleton("Name"), types.singleton(name))
 				acc = if acc then types.intersectionof(acc, instance) else instance
 			elseif ch == "[" then
-				consume()
-				skipws()
-
-				local key = parseident()
-				skipws()
-				if peek() == "=" then
+				if peek() == "$" then
 					consume()
+					local key = parseident()
 					skipws()
+
+					-- NOTE(marcus): People won't read the data that they know
+					-- the attribute of anyways in the selector.
+					-- local fn = types.newfunction()
+					-- fn:setparameters({instance, types.singleton(key)})
+					-- fn:setreturns({types.any})
+					-- local tbl = types.newtable()
+					-- tbl:setproperty(types.singleton("GetAttribute"), fn)
+					-- local i = types.intersectionof(tbl, instance)
+					-- acc = if acc then types.intersectionof(acc, i) else i
+				else
+					skipws()
+					consume()
+					local key = parseident()
+					skipws()
+					consume()
 					local value = parsevalue()
-					if acc and acc:is("class") then
-						local foundkey = false
-						for k, v in acc:properties() do
-							if k == types.singleton(key) then
-								foundkey = true
-								if v.write:is("boolean") then
-									assert(
-										value:is("boolean"),
-										`The field {key} expects a boolean but got {intostr(value)}}`
-									)
-								elseif v.write:is("number") then
-									assert(
-										value:is("number"),
-										`The field {key} expects a number but got {intostr(value)}`
-									)
-								elseif v.write:is("string") then
-									assert(
-										value:is("string"),
-										`The field {key} expects a string but got {intostr(value)}}`
-									)
-								else
-									error("Cannot serialize this type")
+					if classtype then
+						if acc and acc:is("class") then
+							local foundkey = false
+							for k, v in acc:properties() do
+								if k == types.singleton(key) then
+									foundkey = true
+									if v.write:is("boolean") then
+										assert(
+											value:is("boolean"),
+											`The field {key} expects a boolean but got {intostr(value)}}`
+										)
+									elseif v.write:is("number") then
+										assert(
+											value:is("number"),
+											`The field {key} expects a number but got {intostr(value)}`
+										)
+									elseif v.write:is("string") then
+										assert(
+											value:is("string"),
+											`The field {key} expects a string but got {intostr(value)}}`
+										)
+									else
+										error("Cannot serialize this type")
+									end
 								end
 							end
+							assert(foundkey, "Expected a valid key")
 						end
-						assert(foundkey, "Expected a valid key")
 					end
 				end
 				skipws()
@@ -555,12 +575,12 @@ local function querydescendants<T>(root: Instance, selector: T & (string | "")):
 	return root:QueryDescendants(selector) :: any
 end
 
-local txtlabels_under_image_under_folder = querydescendants(workspace,
-	"Folder > ImageButton > TextLabel[Text = 'Part10'][Transparency = 1]" ::
-	"Folder, TextLabel[Text='Test2'][TextTransparency=1]"
-)
+-- local txtlabels_under_image_under_folder = querydescendants(workspace,
+-- 	"Folder > ImageButton > TextLabel[Text = 'Part10'][Transparency = 1]" ::
+-- 	'ImageButton[Image="1231"]'
+-- )
 
-for _, v in txtlabels_under_image_under_folder do
-end
+-- for _, v in txtlabels_under_image_under_folder do
+-- end
 
 return querydescendants
